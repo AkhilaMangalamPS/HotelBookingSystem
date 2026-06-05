@@ -16,6 +16,16 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
+/**
+ * JWT Authentication filter
+ *
+ * this filter intercepts each HTTP incoming request once per request
+ *
+ * Extract JWT token from Authorization header
+ * Validate the token
+ * Retrieve user details from teh token
+ * Set authentication in Spirng security context
+ */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtUtils jwtUtils;
@@ -27,18 +37,33 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
 
+    /**
+     * This method is executed once per request and responsible for :
+     * - Checking for JWT token in request header
+     * - Validating token integrity and expiry
+     * Setting authentication in securityContext if valid
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
         try{
+            //Extract JWT token from authorization header
             String jwt = parseJwt(request);
+
+            //Proceed only if token id valid
             if(jwt != null && jwtUtils.validateToken(jwt)){
+
+                //Extract username from token
                 String username = jwtUtils.getUsernameFromToken(jwt);
+
+                //Load username from database or from userservice
                 UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
+                //Create authentication token with user authorities
                 UsernamePasswordAuthenticationToken authenticationToken =
                         new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
                 authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
+                //Set authentication in Spring securoty
                 SecurityContextHolder.getContext().setAuthentication(authenticationToken);
 
             }
@@ -49,6 +74,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     }
 
+    /**
+     * Extract JWT token from Authorization header
+     *
+     * @param request incoming HTTP request
+     * @return jWT token if present, otherwise null
+     */
     private String parseJwt(HttpServletRequest request){
         String headerAuth = request.getHeader("Authorization");
         if(StringUtils.hasText(headerAuth) && headerAuth.startsWith("Bearer ")){

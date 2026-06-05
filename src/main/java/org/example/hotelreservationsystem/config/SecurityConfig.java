@@ -18,7 +18,10 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Configuration
 @EnableWebSecurity
-
+/**
+ * Defines the complete security architecture for the application
+ * including authentication, authorization, session handling and filter chain.
+ */
 public class SecurityConfig {
     private final CustomUserDetailsService userDetailsService;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -30,11 +33,13 @@ public class SecurityConfig {
         this.customUserDetailsService = customUserDetailsService;
     }
 
+    //Used for hashing and verifying passwords
     @Bean
     public PasswordEncoder passwordEncoder(){
         return new BCryptPasswordEncoder();
     }
 
+    //Authentication provider that delegates authentication
     @Bean
     public DaoAuthenticationProvider authenticationProvider(){
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
