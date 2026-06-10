@@ -1,0 +1,1 @@
+ALTER TABLE hotels ADD COLUMN special_note VARCHAR(255) DEFAULT 'None';

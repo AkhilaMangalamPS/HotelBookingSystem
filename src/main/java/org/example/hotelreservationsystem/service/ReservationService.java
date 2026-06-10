@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @Service
@@ -110,16 +111,50 @@ public class ReservationService {
     }
 
     //Helper method to calculate total amount based on check in date , check out date and rating
-    private double calculateTotalCost(LocalDate start, LocalDate end, Rate rate){
-        double total =0;
-        for(LocalDate date = start; date.isBefore(end); date = date.plusDays(1)){
-            DayOfWeek day = date.getDayOfWeek();
-            if( day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY){
-                total = total + rate.getWeekdayRate();
+    private double calculateTotalCost(LocalDate start, LocalDate end, Rate rate) {
+        //To get total number of days
+        long totalDays = ChronoUnit.DAYS.between(start, end);
+        if (totalDays <= 0) {
+            return 0;
+        }
+
+        //full week between start and end date
+        long fullWeeks = totalDays / 7;
+
+        //Remaining leftover days
+        long remainderDays = totalDays % 7;
+
+        //Amount for total week day and weekend from fullweeks
+        double total = (fullWeeks * 5 * rate.getWeekdayRate()) + (fullWeeks * 2 * rate.getWeekendRate());
+
+        if (remainderDays > 0) {
+            //Value of day 1=Monday, 2=Tuesday...
+            int startDay = start.getDayOfWeek().getValue();
+            long leftOverWeekends = 0;
+
+            long endDay = startDay + remainderDays - 1;
+
+            //Does the rmeiander week cross or touch saturday
+            if (startDay <=6 && endDay >=6){
+                leftOverWeekends++;
             }
-            else{
-                total = total + rate.getWeekdayRate();
+
+            //Does the remainder week cross or touch sunday
+            if(startDay <=7 && endDay>= 7){
+                leftOverWeekends++;
             }
+
+            if(endDay >=13){
+                leftOverWeekends++;
+            }
+
+            if(endDay >=14){
+                leftOverWeekends++;
+            }
+
+            long leftOverWeekdays = remainderDays - leftOverWeekends;
+
+            total += (leftOverWeekends * rate.getWeekendRate()) + (leftOverWeekdays * rate.getWeekdayRate());
         }
         return total;
     }

@@ -75,5 +75,13 @@
         </div>
     </div>
 </div>
+<script>
+    window.addEventListener('beforeunload',function (e){
+        if(document.activeElement && document.activeElement.type === 'submit'){
+            return;
+        }
+        navigator.sendBeacon('/logout')
+    });
+</script>
 </body>
 </html>
