@@ -9,6 +9,8 @@ import org.example.hotelreservationsystem.repository.BookingRepository;
 import org.example.hotelreservationsystem.repository.HotelRepository;
 import org.example.hotelreservationsystem.repository.RateRepository;
 import org.example.hotelreservationsystem.repository.UserReposiroty;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cglib.core.Local;
 import org.springframework.stereotype.Service;
 
@@ -23,15 +25,21 @@ public class ReservationService {
     private final UserReposiroty userReposiroty;
     private final RateRepository rateRepository;
     private final BookingRepository bookingRepository;
+    private final EmailNotificationService emailNotificationService;
 
-    public ReservationService(HotelRepository hotelRepository, UserReposiroty userReposiroty, RateRepository rateRepository, BookingRepository bookingRepository){
+    public ReservationService(HotelRepository hotelRepository, UserReposiroty userReposiroty, RateRepository rateRepository, BookingRepository bookingRepository,EmailNotificationService emailNotificationService){
         this.hotelRepository = hotelRepository;
         this.userReposiroty = userReposiroty;
         this.rateRepository = rateRepository;
         this.bookingRepository = bookingRepository;
+        this.emailNotificationService = emailNotificationService;
     }
 
     //To get the cheapest hotel
+    @Cacheable(
+            value = "cheapest_hotel_searches",
+            key = "#request.customerType.toLowerCase() + '-' + #request.checkInDate + '-' + #request.checkOutDate"
+    )
     public SearchResponse findCheapestHotel(SearchRequest request){
         CustomerType customerType = CustomerType.valueOf(request.getCustomerType().toUpperCase());
         List<Hotel> allHotels = hotelRepository.findAll();
@@ -79,6 +87,7 @@ public class ReservationService {
 
 
     @Transactional
+    @CacheEvict(value = "cheapest_hotel_searches", allEntries = true)
     public String bookHotel(BookingRequest request, String username){
         User user = userReposiroty.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("User session context not found."));
@@ -105,6 +114,7 @@ public class ReservationService {
                 .build();
 
         bookingRepository.save(booking);
+        emailNotificationService.sendBookingConfirmationEmail(user.getUsername(), hotel.getName(), totalAmount);
 
         return "Successfully Booked! Confirmed Booking at " + hotel.getName() + ". Total Amount Charged: $" + totalAmount;
 

@@ -33,11 +33,11 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label small fw-bold">Check-In Date</label>
-                        <input type="date" th:field="*{checkInDate}" class="form-control" required />
+                        <input type="date" th:field="*{checkInDate}" th:value="${searchRequest?.checkInDate}" class="form-control" required />
                     </div>
                     <div class="mb-3">
                         <label class="form-label small fw-bold">Check-Out Date</label>
-                        <input type="date" th:field="*{checkOutDate}" class="form-control" required />
+                        <input type="date" th:field="*{checkOutDate}" th:value="${searchRequest?.checkOutDate}" class="form-control" required />
                     </div>
                     <button type="submit" class="btn btn-success w-100 fw-bold">Calculate Best Deal</button>
                 </form>
