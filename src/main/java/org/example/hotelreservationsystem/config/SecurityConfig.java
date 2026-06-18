@@ -1,33 +1,28 @@
 package org.example.hotelreservationsystem.config;
 
-import jakarta.servlet.http.HttpServletResponse;
-import org.example.hotelreservationsystem.service.CustomUserDetailsService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.authority.mapping.GrantedAuthoritiesMapper;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
-
-    private final CustomUserDetailsService userDetailsService;
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
-
-    // Fixed duplicated constructor parameters
-    public SecurityConfig(CustomUserDetailsService userDetailsService, JwtAuthenticationFilter jwtAuthenticationFilter) {
-        this.userDetailsService = userDetailsService;
-        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
-    }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -35,74 +30,83 @@ public class SecurityConfig {
     }
 
     @Bean
-    public DaoAuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
-        authProvider.setUserDetailsService(userDetailsService);
-        authProvider.setPasswordEncoder(passwordEncoder());
-        return authProvider;
-    }
-
-    @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
-        return authConfig.getAuthenticationManager();
-    }
-
-    @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
 
-                // Allow stateful browser sessions for thymeleaf views
+                // Maintain web sessions for Thymeleaf UI pages
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                 )
 
                 .authorizeHttpRequests(auth -> auth
-                        // Public endpoints
-                        .requestMatchers("/api/auth/**", "/login", "/register", "/css/**", "/js/**").permitAll()
-                        // Admin restricted endpoints
-                        .requestMatchers("/admin/**", "/api/admin/**").hasAuthority("ROLE_ADMIN")
-                        // User and Admin shared dashboard endpoints
-                        // Web UI endpoints: Rely entirely on a verified active web session
+                        // Public Assets and Spring OAuth2 internal endpoints MUST be permitAll
+                        .requestMatchers("/api/auth/**", "/login", "/register", "/css/**", "/js/**", "/oauth2/**", "/login/oauth2/**").permitAll()
+                        // Admin-restricted areas
+                        .requestMatchers("/admin/**", "/api/admin/**").hasRole("ADMIN")
+                        // Thymeleaf Protected UI views
                         .requestMatchers("/dashboard", "/search", "/book").authenticated()
-
                         // Rest API protected endpoints
-                        .requestMatchers("/api/user/**").hasAnyAuthority("ROLE_USER", "ROLE_ADMIN")
+                        .requestMatchers("/api/user/**").hasAnyRole("USER", "ADMIN")
                         .anyRequest().authenticated()
                 )
 
-                .formLogin(form -> form
-                        .loginPage("/login")
-                        .loginProcessingUrl("/login")
+                //  1. THYMELEAF BROWSER WORKFLOW: Maps Keycloak login responses to your UI sessions
+                .oauth2Login(oauth2 -> oauth2
                         .defaultSuccessUrl("/dashboard", true)
-                        .failureUrl("/login?error=true")
-                        .permitAll()
+                        .userInfoEndpoint(userInfo -> userInfo
+                                .userAuthoritiesMapper(this.userAuthoritiesMapper())
+                        )
                 )
 
-                .logout(logout -> logout
-                        .logoutUrl("/logout")
-                        .logoutSuccessUrl("/login?logout")
-                        .invalidateHttpSession(true)
-                        .deleteCookies("JSESSIONID")
-                        .permitAll()
-                )
-                        .exceptionHandling(exception -> exception
-                                .authenticationEntryPoint((request, response, authException) -> {
-                                    String path = request.getServletPath();
-                                    if(!path.startsWith("/api/")){
-                                        response.sendRedirect("/login");
-                                    }else{
-                                        response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized");
-                                    }
-                                })
-                        );
-
-        http.authenticationProvider(authenticationProvider());
-
-        // This remains here, but the shouldNotFilter method inside the filter itself
-        // will keep it from interfering with your standard form actions!
-        http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                //  2. BACKEND REST API WORKFLOW: Parses standalone bearer tokens for native JSON endpoints
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(new KeycloakRoleConverter()))
+                );
 
         return http.build();
+    }
+
+    /**
+     * Extracts Keycloak roles for the Thymeleaf Browser Login Session
+     */
+    private GrantedAuthoritiesMapper userAuthoritiesMapper() {
+        return (authorities) -> {
+            Collection<GrantedAuthority> mappedAuthorities = Collections.emptyList();
+
+            for (GrantedAuthority authority : authorities) {
+                if (authority instanceof OidcUserAuthority oidcUserAuthority) {
+                    Map<String, Object> realmAccess = (Map<String, Object>) oidcUserAuthority.getIdToken().getClaims().get("realm_access");
+                    if (realmAccess != null && realmAccess.containsKey("roles")) {
+                        List<String> roles = (List<String>) realmAccess.get("roles");
+                        mappedAuthorities = roles.stream()
+                                .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
+                                .collect(Collectors.toList());
+                    }
+                }
+            }
+            return mappedAuthorities;
+        };
+    }
+
+    /**
+     *  Extracts Keycloak roles for standalone Backend REST API requests (Bearer Tokens)
+     */
+    static class KeycloakRoleConverter implements org.springframework.core.convert.converter.Converter<org.springframework.security.oauth2.jwt.Jwt, org.springframework.security.authentication.AbstractAuthenticationToken> {
+        @Override
+        public org.springframework.security.authentication.AbstractAuthenticationToken convert(org.springframework.security.oauth2.jwt.Jwt jwt) {
+            Map<String, Object> realmAccess = jwt.getClaim("realm_access");
+            if (realmAccess == null || realmAccess.isEmpty()) {
+                return new org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken(jwt, Collections.emptyList());
+            }
+
+            @SuppressWarnings("unchecked")
+            List<String> roles = (List<String>) realmAccess.get("roles");
+            Collection<GrantedAuthority> authorities = roles.stream()
+                    .map(roleName -> new SimpleGrantedAuthority("ROLE_" + roleName))
+                    .collect(Collectors.toList());
+
+            return new org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken(jwt, authorities, jwt.getClaim("preferred_username"));
+        }
     }
 }

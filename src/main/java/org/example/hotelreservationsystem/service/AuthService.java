@@ -1,6 +1,6 @@
 package org.example.hotelreservationsystem.service;
 
-import org.example.hotelreservationsystem.config.JwtUtils;
+
 import org.example.hotelreservationsystem.dto.AuthRequest;
 import org.example.hotelreservationsystem.dto.AuthResponse;
 import org.example.hotelreservationsystem.model.CustomerType;
@@ -18,14 +18,14 @@ import org.springframework.stereotype.Service;
 public class AuthService {
     private final UserReposiroty userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final AuthenticationManager authenticationManager;
-    private final JwtUtils jwtUtils;
 
-    public AuthService(UserReposiroty userRepository, PasswordEncoder passwordEncoder, AuthenticationManager authenticationManager, JwtUtils jwtUtils){
+
+
+    public AuthService(UserReposiroty userRepository, PasswordEncoder passwordEncoder){
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
-        this.authenticationManager = authenticationManager;
-        this.jwtUtils = jwtUtils;
+
+
     }
 
     public String register(AuthRequest request) {
@@ -49,17 +49,5 @@ public class AuthService {
         return "User Registered successfully";
     }
 
-    public AuthResponse login(AuthRequest request){
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword())
-        );
-
-        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-        String jwt = jwtUtils.generateToken(userDetails);
-
-        String role = userDetails.getAuthorities().iterator().next().getAuthority();
-
-        return new AuthResponse(jwt, userDetails.getUsername(), role);
-    }
 
 }
