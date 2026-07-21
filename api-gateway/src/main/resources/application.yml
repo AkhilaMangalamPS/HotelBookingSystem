@@ -1,0 +1,44 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8081/realms/hotel-realm
+
+  cloud:
+    gateway:
+      routes:
+        - id: inventory-service
+          uri: lb://INVENTORY-SERVICE
+          predicates:
+            - Path=/rooms/**, /hotels/**
+          filters:
+            - RemoveRequestHeader=Cookie,Set-Cookie
+
+        - id: booking-service
+          uri: lb://BOOKING-SERVICE
+          predicates:
+            - Path=/bookings/**
+          filters:
+            - RemoveRequestHeader=Cookie,Set-Cookie
+
+eureka:
+  instance:
+    prefer-ip-address: true
+    ip-address: 127.0.0.1
+  client:
+    service-url:
+      defaultZone: http://127.0.0.1:8761/eureka/
+
+logging:
+  level:
+    org.springframework.security: TRACE
+    org.springframework.web.cors: TRACE
+    org.springframework.cloud.gateway: TRACE
+    reactor.netty.http.server: DEBUG

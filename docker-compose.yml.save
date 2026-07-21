@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  mysql-db:
+    image: mysql:8.0
+    container_name: mysql-db
+    environment:
+      MYSQL_DATABASE: hotel_db
+      MYSQL_ROOT_PASSWORD: root
+    restart: unless-stopped
+    networks:
+      - microservice-network
+
+  eureka-server:
+    build: ../eureka-server
+    container_name: eureka-server
+    restart: unless-stopped
+    networks:
+      - microservice-network
+
+  inventory-service:
+    build: ./inventory-service
+    container_name: inventory-service
+    restart: unless-stopped
+    depends_on:
+      - mysql-db
+      - eureka-server
+    networks:
+      - microservice-network
+
+  booking-service:
+    build: ./booking-service
+    container_name: booking-service
+    restart: unless-stopped
+    depends_on:
+      - mysql-db
+      - eureka-server
+    networks:
+      - microservice-network
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway
+    restart: unless-stopped
+    depends_on:
+      - eureka-server
+    networks:
+      - microservice-network
+
+  frontend-ui:
+    build: /home/akhilamangalamps/Training/React/hotel-booking-ui
+    container_name: frontend-ui
+    ports:
+      - "8085:80"
+    restart: unless-stopped
+    depends_on:
+      - api-gateway
+    networks:
+      - microservice-network
+
+networks:
+  microservice-network:
+    driver: bridge
+
+
+
+
+^X
+
+
+
